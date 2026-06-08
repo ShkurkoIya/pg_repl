@@ -3,7 +3,7 @@ import logging
 from prompt_toolkit import PromptSession
 
 from console import console, render_error
-from db import connect, DB_USER, close
+from db import connect, DB_USER, DB_NAME, close
 from setup import setup_logger
 
 # pylint: disable-next=unused-import
@@ -23,7 +23,7 @@ def main() -> None:
     console.print("\n[bold cyan]═══════════════════════════════════════[/bold cyan]")
     console.print("[bold cyan]   Inventory Management System[/bold cyan]")
     console.print("[bold cyan]═══════════════════════════════════════[/bold cyan]")
-    console.print(f"[dim]Подключено к БД: warehouse_db (user: {DB_USER})[/dim]\n")
+    console.print(f"[dim]Подключено к БД: {DB_NAME} (user: {DB_USER})[/dim]\n")
 
     # Создаём сессию prompt_toolkit с автодополнением команд.
     # https://python-prompt-toolkit.readthedocs.io/en/stable/pages/asking_for_input.html#the-promptsession-object
