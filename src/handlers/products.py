@@ -1,15 +1,16 @@
 import psycopg
 from dataclasses import dataclass
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal
 from rich.table import Table
 from rich.panel import Panel
 from prompt_toolkit import prompt
+from prompt_toolkit.completion import WordCompleter
 from psycopg.rows import class_row
 
 from console import console, render_error
 from db import get_conn
 from commands import command, CATEGORY_PRODUCTS
-from validators import NonEmptyValidator, YesNoValidator, PriceValidator, IntegerValidator
+from validators import NonEmptyValidator, YesNoValidator, PriceValidator
 
 
 @dataclass
@@ -84,14 +85,33 @@ def show_product(_id: str) -> None:
 def add_product() -> None:
     conn = get_conn()
 
+    # Получаем список существующих категорий для UX автокомплита
+    with conn.cursor() as cur:
+        cur.execute("SELECT id, name FROM catalog.product_categories ORDER BY name")
+        categories = cur.fetchall()
+
+    if not categories:
+        render_error("Нельзя добавить товар: сначала создайте хотя бы одну категорию!")
+        return
+
+    cat_map = {c[1]: c[0] for c in categories}
+    cat_completer = WordCompleter(list(cat_map.keys()), ignore_case=True, sentence=True)
+
     sku = prompt("Введите SKU товара (макс. 30 симв.): ", validator=NonEmptyValidator()).strip()
     name = prompt("Введите название товара: ", validator=NonEmptyValidator()).strip()
 
     price_input = prompt("Введите цену товара: ", validator=PriceValidator()).strip()
     price = Decimal(price_input)
 
-    cat_input = prompt("Введите ID категории товара: ", validator=IntegerValidator()).strip()
-    category_id = int(cat_input)
+    # Интерактивный выбор категории по имени с Таб-автокомплитом
+    console.print("[cyan]Выберите категорию товара (Используйте Tab для подсказок):[/cyan]")
+    cat_name_input = prompt("Категория: ", completer=cat_completer).strip()
+
+    if cat_name_input not in cat_map:
+        render_error("Такой категории не существует! Выберите строго из списка.")
+        return
+
+    category_id = cat_map[cat_name_input]
 
     with conn.cursor() as cur:
         cur.execute(
@@ -114,6 +134,16 @@ def edit_product(_id: str) -> None:
         render_error(f"Товар с ID {_id} не найден")
         return
 
+    # Получаем категории для автокомплита
+    with conn.cursor() as cur:
+        cur.execute("SELECT id, name FROM catalog.product_categories ORDER BY name")
+        categories = cur.fetchall()
+        cur.execute("SELECT name FROM catalog.product_categories WHERE id = %s", (product.product_category_id,))
+        current_cat_name = cur.fetchone()[0]
+
+    cat_map = {c[1]: c[0] for c in categories}
+    cat_completer = WordCompleter(list(cat_map.keys()), ignore_case=True, sentence=True)
+
     console.print(f"[cyan]Редактирование товара #{_id}. Нажмите Enter для сохранения старого значения.[/cyan]")
 
     sku = prompt("Новый SKU: ", default=product.sku, validator=NonEmptyValidator()).strip()
@@ -122,9 +152,14 @@ def edit_product(_id: str) -> None:
     price_input = prompt("Новая цена: ", default=str(product.price), validator=PriceValidator()).strip()
     price = Decimal(price_input)
 
-    cat_input = prompt("Новый ID категории: ", default=str(product.product_category_id),
-                       validator=IntegerValidator()).strip()
-    category_id = int(cat_input)
+    # Умный выбор категории при редактировании
+    cat_name_input = prompt("Новая категория: ", default=current_cat_name, completer=cat_completer).strip()
+
+    if cat_name_input not in cat_map:
+        render_error("Такой категории не существует! Выберите строго из списка.")
+        return
+
+    category_id = cat_map[cat_name_input]
 
     with conn.cursor() as cur:
         cur.execute(

@@ -126,18 +126,19 @@ def add_warehouse() -> None:
         console.print("[yellow]⚠ Это первый склад. Он автоматически становится ЦЕНТРАЛЬНЫМ.[/yellow]")
         is_central = True
     else:
-        is_central_input = prompt("Сделать склад центральным? (y/n): ").strip().lower()
-        is_central = is_central_input in ('y', 'yes', 'д', 'да')
+        is_central_input = prompt("Сделать склад центральным? (y/n): ", validator=YesNoValidator()).strip().lower()
+        is_central = YesNoValidator.is_yes(is_central_input)
 
-    with conn.cursor() as cur:
-        if is_central:
-            cur.execute("UPDATE catalog.warehouses SET is_central = FALSE WHERE is_central = TRUE")
+    with conn.transaction():
+        with conn.cursor() as cur:
+            if is_central:
+                cur.execute("UPDATE catalog.warehouses SET is_central = FALSE WHERE is_central = TRUE")
 
-        cur.execute(
-            """INSERT INTO catalog.warehouses (city, address, label, is_central)
-               VALUES (%s, %s, %s, %s)""",
-            (city, address, label, is_central),
-        )
+            cur.execute(
+                """INSERT INTO catalog.warehouses (city, address, label, is_central)
+                   VALUES (%s, %s, %s, %s)""",
+                (city, address, label, is_central),
+            )
 
     msg_suffix = f" ({label})" if label else ""
     console.print(f"[green]✔ Склад в городе {city}{msg_suffix} добавлен [/green]")
@@ -160,9 +161,8 @@ def edit_warehouse(_id: str) -> None:
     address = prompt("Адрес: ", default=warehouse.address, validator=NonEmptyValidator()).strip()
     label = prompt("Метка (необязательно): ", default=warehouse.label or "").strip() or None
 
-    is_central = warehouse.is_central  # По умолчанию статус остается прежним
+    is_central = warehouse.is_central
 
-    # Показываем промпт только если склад сейчас не центральный
     if not warehouse.is_central:
         is_central_input = prompt("Сделать склад центральным? (y/n): ", default="n",
                                   validator=YesNoValidator()).strip().lower()
@@ -170,7 +170,6 @@ def edit_warehouse(_id: str) -> None:
 
     with conn.transaction():
         with conn.cursor() as cur:
-            # Если склад стал центральным, у старого центрального отбираем этот статус
             if is_central and not warehouse.is_central:
                 cur.execute("UPDATE catalog.warehouses SET is_central = FALSE WHERE is_central = TRUE")
 
