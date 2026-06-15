@@ -61,3 +61,16 @@ class ChoiceValidator(Validator):
         text = document.text.strip()
         if text and text not in self.choices:
             raise ValidationError(message=self.message, cursor_position=len(text))
+
+class IntegerValidator(Validator):
+    def validate(self, document):
+        text = document.text.strip()
+        if not text:
+            raise ValidationError(message="Поле не может быть пустым", cursor_position=0)
+        try:
+            val = int(text)
+            if val <= 0:
+                raise ValidationError(message="ID должен быть больше 0", cursor_position=len(text))
+        except ValueError as e:
+            raise ValidationError(message="Введите целое число", cursor_position=len(text)) from e
+

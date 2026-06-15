@@ -68,120 +68,109 @@ def _render_warehouse(warehouse: Warehouse) -> None:
 
 @command("list warehouses", "список всех складов", CATEGORY_WAREHOUSES)
 def list_warehouses() -> None:
-    try:
-        conn = get_conn()
-        table = Table(title="Склады", show_header=True, header_style="bold cyan")
+    conn = get_conn()
+    table = Table(title="Склады", show_header=True, header_style="bold cyan")
 
-        table.add_column("ID", style="dim", width=6, justify="right")
-        table.add_column("Город", style="green", min_width=15)
-        table.add_column("Адрес", style="yellow", min_width=25)
-        table.add_column("Метка", style="magenta", min_width=15)
-        table.add_column("Центральный", style="bold blue", justify="center", width=12)
+    table.add_column("ID", style="dim", width=6, justify="right")
+    table.add_column("Город", style="green", min_width=15)
+    table.add_column("Адрес", style="yellow", min_width=25)
+    table.add_column("Метка", style="magenta", min_width=15)
+    table.add_column("Центральный", style="bold blue", justify="center", width=12)
 
-        with conn.cursor(row_factory=class_row(Warehouse)) as cur:
-            cur.execute("SELECT * FROM catalog.warehouses ORDER BY id")
-            warehouses: list[Warehouse] = cur.fetchall()
+    with conn.cursor(row_factory=class_row(Warehouse)) as cur:
+        cur.execute("SELECT * FROM catalog.warehouses ORDER BY id")
+        warehouses: list[Warehouse] = cur.fetchall()
 
-        if not warehouses:
-            console.print("[yellow]⚠ Список складов пуст.[/yellow]")
-            return
+    if not warehouses:
+        console.print("[yellow]⚠ Список складов пуст.[/yellow]")
+        return
 
-        for warehouse in warehouses:
-            table.add_row(
-                str(warehouse.id),
-                warehouse.city,
-                warehouse.address,
-                warehouse.label or "",
-                "⭐" if warehouse.is_central else "",
-            )
-        console.print(table)
-    except psycopg.Error as e:
-        render_error(f"Ошибка БД при получении списка складов: {e}")
+    for warehouse in warehouses:
+        table.add_row(
+            str(warehouse.id),
+            warehouse.city,
+            warehouse.address,
+            warehouse.label or "",
+            "⭐" if warehouse.is_central else "",
+        )
+    console.print(table)
 
 
 @command("show warehouse", "информация о складе", CATEGORY_WAREHOUSES)
 def show_warehouse(_id: str) -> None:
-    try:
-        conn = get_conn()
-        with conn.cursor(row_factory=class_row(Warehouse)) as cur:
-            cur.execute("SELECT * FROM catalog.warehouses WHERE id = %s", (_id,))
-            warehouse: Warehouse | None = cur.fetchone()
+    conn = get_conn()
+    with conn.cursor(row_factory=class_row(Warehouse)) as cur:
+        cur.execute("SELECT * FROM catalog.warehouses WHERE id = %s", (_id,))
+        warehouse: Warehouse | None = cur.fetchone()
 
-        if warehouse is None:
-            render_error(f"Склад с ID {_id} не найден")
-            return
+    if warehouse is None:
+        render_error(f"Склад с ID {_id} не найден")
+        return
 
-        _render_warehouse(warehouse)
-    except psycopg.Error as e:
-        render_error(f"Ошибка БД при поиске склада: {e}")
+    _render_warehouse(warehouse)
 
 
 @command("add warehouse", "добавить склад (интерактивно)", CATEGORY_WAREHOUSES)
 def add_warehouse() -> None:
-    try:
-        conn = get_conn()
+    conn = get_conn()
 
-        with conn.cursor() as cur:
-            cur.execute("SELECT COUNT(*) FROM catalog.warehouses")
-            count = cur.fetchone()[0]
+    with conn.cursor() as cur:
+        cur.execute("SELECT COUNT(*) FROM catalog.warehouses")
+        count = cur.fetchone()[0]
 
-        city = prompt("Город: ", validator=city_validator, completer=city_completer).strip()
-        address = prompt("Адрес: ", validator=NonEmptyValidator()).strip()
-        label = prompt("Метка (необязательно): ").strip() or None
+    city = prompt("Город: ", validator=city_validator, completer=city_completer).strip()
+    address = prompt("Адрес: ", validator=NonEmptyValidator()).strip()
+    label = prompt("Метка (необязательно): ").strip() or None
 
-        if count == 0:
-            console.print("[yellow]⚠ Это первый склад. Он автоматически становится ЦЕНТРАЛЬНЫМ.[/yellow]")
-            is_central = True
-        else:
-            is_central_input = prompt("Сделать склад центральным? (y/n): ").strip().lower()
-            is_central = is_central_input in ('y', 'yes', 'д', 'да')
+    if count == 0:
+        console.print("[yellow]⚠ Это первый склад. Он автоматически становится ЦЕНТРАЛЬНЫМ.[/yellow]")
+        is_central = True
+    else:
+        is_central_input = prompt("Сделать склад центральным? (y/n): ").strip().lower()
+        is_central = is_central_input in ('y', 'yes', 'д', 'да')
 
-        with conn.cursor() as cur:
-            if is_central:
-                cur.execute("UPDATE catalog.warehouses SET is_central = FALSE WHERE is_central = TRUE")
+    with conn.cursor() as cur:
+        if is_central:
+            cur.execute("UPDATE catalog.warehouses SET is_central = FALSE WHERE is_central = TRUE")
 
-            cur.execute(
-                """INSERT INTO catalog.warehouses (city, address, label, is_central)
-                   VALUES (%s, %s, %s, %s)""",
-                (city, address, label, is_central),
-            )
+        cur.execute(
+            """INSERT INTO catalog.warehouses (city, address, label, is_central)
+               VALUES (%s, %s, %s, %s)""",
+            (city, address, label, is_central),
+        )
 
-        msg_suffix = f" ({label})" if label else ""
-        console.print(f"[green]✔ Склад в городе {city}{msg_suffix} добавлен [/green]")
-    except psycopg.Error as e:
-        render_error(f"Ошибка БД при добавлении склада: {e}")
+    msg_suffix = f" ({label})" if label else ""
+    console.print(f"[green]✔ Склад в городе {city}{msg_suffix} добавлен [/green]")
 
 
 @command("edit warehouse", "редактировать склад", CATEGORY_WAREHOUSES)
 def edit_warehouse(_id: str) -> None:
-    try:
-        conn = get_conn()
-        with conn.cursor(row_factory=class_row(Warehouse)) as cur:
-            cur.execute("SELECT * FROM catalog.warehouses WHERE id = %s", (_id,))
-            warehouse: Warehouse | None = cur.fetchone()
+    conn = get_conn()
+    with conn.cursor(row_factory=class_row(Warehouse)) as cur:
+        cur.execute("SELECT * FROM catalog.warehouses WHERE id = %s", (_id,))
+        warehouse: Warehouse | None = cur.fetchone()
 
-        if warehouse is None:
-            render_error(f"Склад с ID {_id} не найден")
-            return
+    if warehouse is None:
+        render_error(f"Склад с ID {_id} не найден")
+        return
 
-        console.print(f"[cyan]Редактирование склада #{_id}. Нажмите Enter для сохранения старого значения.[/cyan]")
+    console.print(f"[cyan]Редактирование склада #{_id}. Нажмите Enter для сохранения старого значения.[/cyan]")
 
-        city = prompt("Город: ", default=warehouse.city, validator=city_validator, completer=city_completer).strip()
-        address = prompt("Адрес: ", default=warehouse.address, validator=NonEmptyValidator()).strip()
-        label = prompt("Метка (необязательно): ", default=warehouse.label or "").strip() or None
+    city = prompt("Город: ", default=warehouse.city, validator=city_validator, completer=city_completer).strip()
+    address = prompt("Адрес: ", default=warehouse.address, validator=NonEmptyValidator()).strip()
+    label = prompt("Метка (необязательно): ", default=warehouse.label or "").strip() or None
 
-        is_central_default = "y" if warehouse.is_central else "n"
-        is_central_input = prompt("Сделать склад центральным? (y/n): ", default=is_central_default).strip().lower()
-        is_central = is_central_input in ('y', 'yes', 'д', 'да')
+    is_central = warehouse.is_central  # По умолчанию статус остается прежним
 
+    # Показываем промпт только если склад сейчас не центральный
+    if not warehouse.is_central:
+        is_central_input = prompt("Сделать склад центральным? (y/n): ", default="n",
+                                  validator=YesNoValidator()).strip().lower()
+        is_central = YesNoValidator.is_yes(is_central_input)
+
+    with conn.transaction():
         with conn.cursor() as cur:
-            if not is_central and warehouse.is_central:
-                cur.execute("SELECT COUNT(*) FROM catalog.warehouses WHERE is_central = TRUE AND id != %s", (_id,))
-                if cur.fetchone()[0] == 0:
-                    console.print(
-                        "[bold yellow]⚠ В системе должен оставаться хотя бы один центральный склад![/bold yellow]")
-                    is_central = True
-
+            # Если склад стал центральным, у старого центрального отбираем этот статус
             if is_central and not warehouse.is_central:
                 cur.execute("UPDATE catalog.warehouses SET is_central = FALSE WHERE is_central = TRUE")
 
@@ -195,39 +184,34 @@ def edit_warehouse(_id: str) -> None:
                 (city, address, label, is_central, _id),
             )
 
-        msg_suffix = f" ({label})" if label else ""
-        console.print(f"[green]✔ Склад в городе {city}{msg_suffix} обновлен [/green]")
-    except psycopg.Error as e:
-        render_error(f"Ошибка БД при редактировании склада: {e}")
+    msg_suffix = f" ({label})" if label else ""
+    console.print(f"[green]✔ Склад в городе {city}{msg_suffix} обновлен [/green]")
 
 
 @command("delete warehouse", "удалить склад", CATEGORY_WAREHOUSES)
 def delete_warehouse(_id: str) -> None:
-    try:
-        conn = get_conn()
-        with conn.cursor(row_factory=class_row(Warehouse)) as cur:
-            cur.execute("SELECT * FROM catalog.warehouses WHERE id = %s", (_id,))
-            warehouse: Warehouse | None = cur.fetchone()
+    conn = get_conn()
+    with conn.cursor(row_factory=class_row(Warehouse)) as cur:
+        cur.execute("SELECT * FROM catalog.warehouses WHERE id = %s", (_id,))
+        warehouse: Warehouse | None = cur.fetchone()
 
-        if warehouse is None:
-            render_error(f"Склад с ID {_id} не найден")
-            return
+    if warehouse is None:
+        render_error(f"Склад с ID {_id} не найден")
+        return
 
-        _render_warehouse(warehouse)
+    _render_warehouse(warehouse)
 
-        if warehouse.is_central:
-            render_error("Нельзя удалить центральный склад! Сначала назначьте центральным другой склад.")
-            return
+    if warehouse.is_central:
+        render_error("Нельзя удалить центральный склад! Сначала назначьте центральным другой склад.")
+        return
 
-        answer = prompt("Вы уверены? (y/n, д/н): ", validator=YesNoValidator()).strip().lower()
+    answer = prompt("Вы уверены? (y/n, д/н): ", validator=YesNoValidator()).strip().lower()
 
-        if YesNoValidator.is_yes(answer):
-            with conn.cursor() as cur:
-                cur.execute("DELETE FROM catalog.warehouses WHERE id = %s", (_id,))
+    if YesNoValidator.is_yes(answer):
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM catalog.warehouses WHERE id = %s", (_id,))
 
-            msg_suffix = f" ({warehouse.label})" if warehouse.label else ""
-            console.print(f"[green]✔ Склад в городе {warehouse.city}{msg_suffix} удален [/green]")
-        else:
-            console.print("[yellow]Удаление отменено.[/yellow]")
-    except psycopg.Error as e:
-        render_error(f"Ошибка БД при удалении склада: {e}")
+        msg_suffix = f" ({warehouse.label})" if warehouse.label else ""
+        console.print(f"[green]✔ Склад в городе {warehouse.city}{msg_suffix} удален [/green]")
+    else:
+        console.print("[yellow]Удаление отменено.[/yellow]")
